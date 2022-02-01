@@ -1,0 +1,19 @@
+{
+
+  "description": "Calculates different things on FHTW CIS Homepage",
+  "manifest_version": 2,
+  "name": "FHTW CIS Calculator",
+  "version": "1.0",
+  "homepage_url": "https://github.com/klues/webextensions-examples/tree/master/cis-homeoffice",
+  "icons": {
+    "48": "icons/border-48.png"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["*://cis.technikum-wien.at/*"],
+      "js": ["cis-homeoffice.js"]
+    }
+  ]
+
+}
