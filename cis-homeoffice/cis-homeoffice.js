@@ -116,7 +116,7 @@ function print(text) {
     contentHTML += text + "<br/>";
 }
 
-function printBalken(values, colors, texts, startText, marker) {
+function printBalken(values, colors, texts, startText, marker, postText) {
     let html = '';
     texts = texts || [];
     if(startText) {
@@ -149,6 +149,10 @@ function printBalken(values, colors, texts, startText, marker) {
     if (marker) {
         html += `<div style="display:inline-block; position: absolute; left: 0; top:-10px; z-index: -1; width: ${marker * 0.85}%; height: 35px; border-right: 2px solid red"></div>`
     }
+
+    if (postText) {
+        html += `<div style="display:inline-block; margin-left: 1em; width: 7%">${postText}</div>`;
+    }
     html = `<div style="position: relative">${html}</div>`;
     contentHTML += html;
 }
@@ -158,22 +162,32 @@ function calc(object, keys) {
         let rows = object[key];
         let sumAnwesend = 0;
         let sumHO = 0;
+        let HOTage = [];
+        let anwesendTage = [];
         rows.forEach(row => {
             let isPause = row.aktivitaet.includes('Pause');
             let isGanztagAbwesend = !!row.ganzTagAbwesenheit;
             if(!isPause && !isGanztagAbwesend && row.aktivitaet.includes("Homeoffice")) {
                 sumHO += row.minutes;
+                if (!HOTage.includes(row.date.day)) {
+                    HOTage.push(row.date.day)
+                }
             } else if(!isPause && !isGanztagAbwesend && !row.aktivitaet.includes("Homeoffice")) {
                 sumAnwesend += row.minutes;
+                if (!anwesendTage.includes(row.date.day)) {
+                    anwesendTage.push(row.date.day)
+                }
             } else if (isGanztagAbwesend) {
                 let hoursPerDay = parseFloat(localStorage.getItem('hoursPerDay'));
-                if (row.ganzTagAbwesenheit.includes("ZA")) {
+                if (row.ganzTagAbwesenheit.includes("ZA") || row.ganzTagAbwesenheit.includes("Urlaub")) {
                     sumAnwesend += hoursPerDay * 60;
-                } else if (row.ganzTagAbwesenheit.includes("Urlaub")) {
-                    sumAnwesend += hoursPerDay * 60;
+                    if (!anwesendTage.includes(row.date.day)) {
+                        anwesendTage.push(row.date.day)
+                    }
                 }
             }
         });
+        HOTage.filter(tag => !anwesendTage.includes(tag));
         let total = sumHO + sumAnwesend;
         let percentageHO = Math.round(sumHO/total*100);
         let percentageAnwesend = Math.round(sumAnwesend/total*100);
@@ -181,7 +195,8 @@ function calc(object, keys) {
         //print(printText);
         let monate = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
         let texts = [`HO: ${percentageHO}%`, `A: ${percentageAnwesend}%`]
-        printBalken([percentageHO, percentageAnwesend], ['orange', 'lightblue'], texts, `${monate[key-1]}: `, 40);
+        let postText = `${HOTage.length} / ${anwesendTage.length} Tage`;
+        printBalken([percentageHO, percentageAnwesend], ['orange', 'lightblue'], texts, `${monate[key-1]}: `, 40, postText);
     })
 }
 
