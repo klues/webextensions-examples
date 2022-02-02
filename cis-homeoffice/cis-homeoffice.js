@@ -1,7 +1,3 @@
-/*
-Just draw a border round the document.body.
-*/
-document.body.style.border = "5px solid red";
 setInterval(checkHomeoffice, 2000);
 let contentDiv = null;
 let contentDivId = "hoPluginContentDiv";
@@ -9,10 +5,8 @@ if (!localStorage.getItem('hoursPerDay')) {
     localStorage.setItem('hoursPerDay', 7.7);
 }
 
-function setHoursPerDay (event) {
-    console.warn(hoursPerDay);
-    hoursPerDay = parseFloat(event.target.value);
-}
+let contentHTML = '';
+let lastContentHTML = '';
 
 function checkHomeoffice() {
     let content = document.getElementById("content");
@@ -23,14 +17,14 @@ function checkHomeoffice() {
             contentDiv = document.createElement("div");
             contentDiv.id = contentDivId;
             table.insertAdjacentElement('beforebegin', contentDiv);
+            lastContentHTML = "";
         }
-        contentDiv.innerHTML = "";
-        print("------------");
-        contentDiv.innerHTML += `
+        contentHTML = "";
+        print();
+        contentHTML += `
             <label for="inHoursPerDay">Stunden pro Woche: </label>
-            <input id="inHoursPerDay" type="number" min="1" max="10" step="0.1" value="${localStorage.getItem('hoursPerDay')}" onchange="console.log(event.target.value); localStorage.setItem('hoursPerDay', parseFloat(event.target.value))"/><br/>
+            <input id="inHoursPerDay" type="number" min="1" max="10" step="0.1" value="${localStorage.getItem('hoursPerDay')}" onchange="localStorage.setItem('hoursPerDay', parseFloat(event.target.value))"/><br/>
         `;
-        //content.getElementById("inHoursPerDay").onchange = (event) => {console.log(event);setHoursPerDay(event)};
 
         let rows = [];
         let domRows = Array.from(table.getElementsByTagName("tr"));
@@ -76,7 +70,7 @@ function checkHomeoffice() {
 
         }
 
-        rows = rows.filter(row => row.minutes || row.ganzTagAbwesenheit);
+        rows = rows.filter(row => row.date && (row.minutes || row.ganzTagAbwesenheit));
         let rowsMonth = {};
         let rowsWeek = {};
         let rowsArbeit = {};
@@ -85,30 +79,54 @@ function checkHomeoffice() {
             rowsWeek[row.date.week] = rowsWeek[row.date.week] || [];
             rowsMonth[row.date.month].push(row);
             rowsWeek[row.date.week].push(row);
-            let arbeitKey = row.projekt + row.ap + row.oe + row.aktivitaet + "";
-            arbeitKey = arbeitKey.replaceAll(" - Homeoffice", "").trim();
+            let arbeitKey = (row.projekt || '') + (row.ap || '') + (row.aktivitaet || '') + (row.oe || '') + "";
+            arbeitKey = arbeitKey.replaceAll(" - Homeoffice", "").replaceAll(" ", "").trim();
             if (arbeitKey && arbeitKey !== "NaN" && !arbeitKey.includes("Pause")) {
                 rowsArbeit[arbeitKey] = rowsArbeit[arbeitKey] || [];
                 rowsArbeit[arbeitKey].push(row);
             }
         });
-        print("------------");
-        calc(rowsMonth, "Monat: ");
-        print("------------");
+        print();
+        let monatKey1 = new Date().getMonth() + 1;
+        let monthKey2 = monatKey1 > 1 ? monatKey1 - 1 : 12;
+        calc(rowsMonth, [monatKey1, monthKey2], "Monat: ");
+        print();
         //calc(rowsWeek, "Woche: ");
         //print("------------");
         calcArbeit(rowsArbeit, "Arbeit: ");
-        print("------------");
+        print();
+    }
+    if (contentHTML !== lastContentHTML) {
+        contentDiv.innerHTML = contentHTML;
+        lastContentHTML = contentHTML;
     }
 }
 
 function print(text) {
-    console.log(text);
-    contentDiv.innerHTML += text + "<br/>";
+    text = text || '';
+    //console.log(text);
+    contentHTML += text + "<br/>";
 }
 
-function calc(object, text) {
-    Object.keys(object).forEach(key => {
+function printBalken(values, colors, texts, startText, marker) {
+    let html = '';
+    texts = texts || [];
+    if(startText) {
+        html += `<div style="display:inline-block; width: 5%">${startText}</div>`;
+    }
+    values.forEach((value, index) => {
+        let text = texts[index] || '';
+        html += `<div style="display:inline-block; text-overflow: clip; overflow: hidden; width: ${value* 0.85}%; height: 15px; background-color: ${colors[index]}; border: 1px solid black" title="${text}">${text}</div>`
+    });
+    if (marker) {
+        html += `<div style="display:inline-block; position: absolute; left: 0; top:-10px; z-index: -1; width: ${marker * 0.85}%; height: 35px; border-right: 2px solid red"></div>`
+    }
+    html = `<div style="position: relative">${html}</div>`;
+    contentHTML += html;
+}
+
+function calc(object, keys, text) {
+    keys.forEach(key => {
         let rows = object[key];
         let sumAnwesend = 0;
         let sumHO = 0;
@@ -129,8 +147,12 @@ function calc(object, text) {
             }
         });
         let total = sumHO + sumAnwesend;
-        let printText = `${text}${key} -> HO: ${Math.round(sumHO/total*100)}%, Anwesend: ${Math.round(sumAnwesend/total*100)}%`;
-        print(printText);
+        let percentageHO = Math.round(sumHO/total*100);
+        let percentageAnwesend = Math.round(sumAnwesend/total*100);
+        //let printText = `${text}${key} -> HO: ${percentageHO}%, Anwesend: ${percentageAnwesend}%`;
+        //print(printText);
+        let texts = [`HO: ${percentageHO}%`, `A: ${percentageAnwesend}%`]
+        printBalken([percentageHO, percentageAnwesend], ['orange', 'lightblue'], texts, `Monat ${key}: `, 40);
     })
 }
 
@@ -149,10 +171,16 @@ function calcArbeit(object, text) {
             }
         });
     });
-    Object.keys(object).forEach(key => {
+    let values = [];
+    let texts = [];
+    let keys = Object.keys(object).sort();
+    keys.forEach(key => {
         //print(`${key} -> ${Math.round(sums[key])} -> ${Math.round(sums[key]/totalSum*100)}%`)
-        print(`${key} -> ${Math.round(sums[key]/totalSum*100)}%`)
+        let value = Math.round(sums[key]/totalSum*100);
+        texts.push(`${key}: ${value}%`);
+        values.push(value);
     });
+    printBalken(values, ['lightgreen', 'lightcyan', 'lightpink', 'gold', 'beige', 'lightgray', 'yellow'], texts, 'Arbeit: ');
 }
 
 function getWeek(year, month, day) {
