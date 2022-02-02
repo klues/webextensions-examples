@@ -22,7 +22,7 @@ function checkHomeoffice() {
         contentHTML = "";
         print();
         contentHTML += `
-            <label for="inHoursPerDay">Stunden pro Woche: </label>
+            <label for="inHoursPerDay">Stunden pro Tag: </label>
             <input id="inHoursPerDay" type="number" min="1" max="10" step="0.1" value="${localStorage.getItem('hoursPerDay')}" onchange="localStorage.setItem('hoursPerDay', parseFloat(event.target.value))"/><br/>
         `;
 
@@ -74,26 +74,34 @@ function checkHomeoffice() {
         let rowsMonth = {};
         let rowsWeek = {};
         let rowsArbeit = {};
+        let rowsArbeitOverview = {};
         rows.forEach(row => {
             rowsMonth[row.date.month] = rowsMonth[row.date.month] || [];
             rowsWeek[row.date.week] = rowsWeek[row.date.week] || [];
             rowsMonth[row.date.month].push(row);
             rowsWeek[row.date.week].push(row);
-            let arbeitKey = (row.projekt || '') + (row.ap || '') + (row.aktivitaet || '') + (row.oe || '') + "";
+            let arbeitKey = (row.aktivitaet || '') + '#' + (row.projekt || '') + (row.ap || '') + "";
+            let arbeitKeyOverview = (row.aktivitaet || '').trim();
             arbeitKey = arbeitKey.replaceAll(" - Homeoffice", "").replaceAll(" ", "").trim();
-            if (arbeitKey && arbeitKey !== "NaN" && !arbeitKey.includes("Pause")) {
+            arbeitKeyOverview = arbeitKeyOverview.replaceAll(" - Homeoffice", "").replaceAll(" ", "").trim();
+            if (arbeitKey && arbeitKey !== "NaN" && !arbeitKey.includes("Pause") && !arbeitKey.includes("Arztbesuch")) {
                 rowsArbeit[arbeitKey] = rowsArbeit[arbeitKey] || [];
                 rowsArbeit[arbeitKey].push(row);
+            }
+            if (arbeitKeyOverview && arbeitKeyOverview !== "NaN" && !arbeitKeyOverview.includes("Pause") && !arbeitKeyOverview.includes("Arztbesuch")) {
+                rowsArbeitOverview[arbeitKeyOverview] = rowsArbeitOverview[arbeitKeyOverview] || [];
+                rowsArbeitOverview[arbeitKeyOverview].push(row);
             }
         });
         print();
         let monatKey1 = new Date().getMonth() + 1;
         let monthKey2 = monatKey1 > 1 ? monatKey1 - 1 : 12;
-        calc(rowsMonth, [monatKey1, monthKey2], "Monat: ");
+        calc(rowsMonth, [monatKey1, monthKey2]);
         print();
         //calc(rowsWeek, "Woche: ");
         //print("------------");
-        calcArbeit(rowsArbeit, "Arbeit: ");
+        calcArbeit(rowsArbeitOverview, "Arbeit Überblick: ");
+        calcArbeit(rowsArbeit, "Arbeit Detail: ");
         print();
     }
     if (contentHTML !== lastContentHTML) {
@@ -112,12 +120,32 @@ function printBalken(values, colors, texts, startText, marker) {
     let html = '';
     texts = texts || [];
     if(startText) {
-        html += `<div style="display:inline-block; width: 5%">${startText}</div>`;
+        html += `<div style="display:inline-block; width: 7%">${startText}</div>`;
     }
-    values.forEach((value, index) => {
-        let text = texts[index] || '';
-        html += `<div style="display:inline-block; text-overflow: clip; overflow: hidden; width: ${value* 0.85}%; height: 15px; background-color: ${colors[index]}; border: 1px solid black" title="${text}">${text}</div>`
+
+    let categories = [];
+    texts.forEach(text => {
+        if (text.includes('#')) {
+            let category = text.split('#')[0];
+            if (category && !categories.includes(category)) {
+                categories.push(category);
+            }
+        }
     });
+
+    for (let i = 0; i < values.length; i++) {
+        let text = texts[i] || '';
+        let value = values[i];
+        let color = colors[i];
+        let category = text.includes('#') ? text.split('#')[0] : null;
+        if (category) {
+            let index = categories.indexOf(category);
+            color = colors[index];
+        }
+
+        html += `<div style="display:inline-block; text-overflow: clip; overflow: hidden; width: ${value* 0.85}%; height: 15px; background-color: ${color}; outline: 1px solid black" title="${text}">${text}</div>`
+    }
+
     if (marker) {
         html += `<div style="display:inline-block; position: absolute; left: 0; top:-10px; z-index: -1; width: ${marker * 0.85}%; height: 35px; border-right: 2px solid red"></div>`
     }
@@ -125,7 +153,7 @@ function printBalken(values, colors, texts, startText, marker) {
     contentHTML += html;
 }
 
-function calc(object, keys, text) {
+function calc(object, keys) {
     keys.forEach(key => {
         let rows = object[key];
         let sumAnwesend = 0;
@@ -151,8 +179,9 @@ function calc(object, keys, text) {
         let percentageAnwesend = Math.round(sumAnwesend/total*100);
         //let printText = `${text}${key} -> HO: ${percentageHO}%, Anwesend: ${percentageAnwesend}%`;
         //print(printText);
+        let monate = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
         let texts = [`HO: ${percentageHO}%`, `A: ${percentageAnwesend}%`]
-        printBalken([percentageHO, percentageAnwesend], ['orange', 'lightblue'], texts, `Monat ${key}: `, 40);
+        printBalken([percentageHO, percentageAnwesend], ['orange', 'lightblue'], texts, `${monate[key-1]}: `, 40);
     })
 }
 
@@ -176,11 +205,11 @@ function calcArbeit(object, text) {
     let keys = Object.keys(object).sort();
     keys.forEach(key => {
         //print(`${key} -> ${Math.round(sums[key])} -> ${Math.round(sums[key]/totalSum*100)}%`)
-        let value = Math.round(sums[key]/totalSum*100);
-        texts.push(`${key}: ${value}%`);
+        let value = Math.round(sums[key]/totalSum*100 * 10) / 10;
+        texts.push(`${key}: ${value}% (${Math.round((sums[key] / 60) * 10) / 10}h)`);
         values.push(value);
     });
-    printBalken(values, ['lightgreen', 'lightcyan', 'lightpink', 'gold', 'beige', 'lightgray', 'yellow'], texts, 'Arbeit: ');
+    printBalken(values, ['lightgreen', 'lightcyan', 'lightpink', 'gold', 'beige', 'lightgray', 'yellow', 'azure', 'aquamarine', 'beige', 'bisque', 'burlywood'], texts, text);
 }
 
 function getWeek(year, month, day) {
